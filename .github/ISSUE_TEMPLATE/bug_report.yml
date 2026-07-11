@@ -1,0 +1,32 @@
+name: Bug report
+description: Report an incorrect parse, calculation, or display problem
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: dropdown
+    id: source
+    attributes:
+      label: Session source
+      options: [Codex, Claude Code, Grok CLI, Generic JSONL, Other]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: llmusage and Node.js versions
+      placeholder: llmusage 0.1.0, Node.js 22.0.0
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Do not attach session content or credentials. A redacted schema-only fixture is ideal.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true

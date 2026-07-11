@@ -1,0 +1,64 @@
+{
+  "name": "llmusage",
+  "version": "0.1.0",
+  "description": "Cross-platform TUI for local Codex, Claude Code, and Grok CLI token usage and API-equivalent cost",
+  "type": "module",
+  "bin": {
+    "llmusage": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/cli.tsx",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepare": "npm run build",
+    "prepack": "npm run build && npm test"
+  },
+  "keywords": [
+    "llm",
+    "usage",
+    "tokens",
+    "cost",
+    "codex",
+    "claude-code",
+    "grok",
+    "tui",
+    "cli"
+  ],
+  "author": "8a1a8",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/8a1a8/llmusage.git"
+  },
+  "bugs": {
+    "url": "https://github.com/8a1a8/llmusage/issues"
+  },
+  "homepage": "https://github.com/8a1a8/llmusage#readme",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ink": "^6.8.0",
+    "react": "^19.2.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.14",
+    "tsx": "^4.20.6",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}
