@@ -5,6 +5,7 @@ export interface UsageRecord {
   timestamp: Date;
   source: Source;
   model: string;
+  project: string;
   sessionId: string;
   uncachedInputTokens: number;
   cachedInputTokens: number;
@@ -57,6 +58,7 @@ export interface UsageGroup extends UsageTotals {
   key: string;
   source?: Source;
   model?: string;
+  project?: string;
 }
 
 export interface DiscoveredFile {

@@ -1,6 +1,6 @@
 import {opendir, stat} from 'node:fs/promises';
 import {homedir} from 'node:os';
-import {basename, extname, join, normalize, resolve} from 'node:path';
+import {basename, dirname, extname, join, normalize, resolve} from 'node:path';
 import type {DiscoveredFile, Source} from './types.js';
 import {expandHome} from './utils.js';
 
@@ -13,7 +13,10 @@ const sourceFromPath = (path: string): Source => {
   const normalized = normalize(path).toLowerCase();
   if (normalized.includes(`${normalize('.codex/sessions').toLowerCase()}`)) return 'codex';
   if (normalized.includes(`${normalize('.claude/projects').toLowerCase()}`)) return 'claude';
-  if (normalized.includes(`${normalize('.grok/sessions').toLowerCase()}`) && basename(path).toLowerCase() === 'updates.jsonl') return 'grok';
+  if (
+    normalized.includes(`${normalize('.grok/sessions').toLowerCase()}`) &&
+    ['updates.jsonl', 'signals.json'].includes(basename(path).toLowerCase())
+  ) return 'grok';
   return 'generic';
 };
 
@@ -54,7 +57,7 @@ export const discoverFiles = async (paths?: string[], sources?: Source[]): Promi
           await walk(
             path,
             'generic',
-            candidate => extname(candidate).toLowerCase() === '.jsonl',
+            candidate => extname(candidate).toLowerCase() === '.jsonl' || basename(candidate).toLowerCase() === 'signals.json',
             output,
             warnings
           );
@@ -72,14 +75,33 @@ export const discoverFiles = async (paths?: string[], sources?: Source[]): Promi
       await walk(join(home, '.claude', 'projects'), 'claude', path => extname(path).toLowerCase() === '.jsonl', output, warnings);
     }
     if (allowed.has('grok')) {
-      await walk(join(home, '.grok', 'sessions'), 'grok', path => basename(path).toLowerCase() === 'updates.jsonl', output, warnings);
+      await walk(
+        join(home, '.grok', 'sessions'),
+        'grok',
+        path => ['updates.jsonl', 'signals.json'].includes(basename(path).toLowerCase()),
+        output,
+        warnings
+      );
     }
   }
 
   const unique = new Map<string, DiscoveredFile>();
+  const grokUpdateDirectories = new Set(
+    output
+      .filter(file =>
+        basename(file.path).toLowerCase() === 'updates.jsonl' &&
+        (file.source === 'grok' || sourceFromPath(resolve(file.path)) === 'grok')
+      )
+      .map(file => normalize(dirname(resolve(file.path))).toLowerCase())
+  );
   for (const file of output) {
     const path = resolve(file.path);
     const inferred = file.source === 'generic' ? sourceFromPath(path) : file.source;
+    if (
+      inferred === 'grok' &&
+      basename(path).toLowerCase() === 'signals.json' &&
+      grokUpdateDirectories.has(normalize(dirname(path)).toLowerCase())
+    ) continue;
     if (allowed.has(inferred)) unique.set(normalize(path).toLowerCase(), {path, source: inferred});
   }
   return {files: [...unique.values()].sort((a, b) => a.path.localeCompare(b.path)), warnings};

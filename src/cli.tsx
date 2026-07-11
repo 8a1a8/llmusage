@@ -13,7 +13,8 @@ const help = `llmusage ${packageJson.version}
 Inspect local Codex, Claude Code, and Grok CLI JSONL sessions.
 
 Usage:
-  npx llmusage [paths...] [options]
+  lu [paths...] [options]
+  llmusage [paths...] [options]
 
 Options:
   --path <path>       Additional JSONL file or directory (repeatable)
@@ -29,7 +30,7 @@ Options:
   --help              Show help
   --version           Show version
 
-TUI keys: ←/→ period · s source · m metric · r refresh · q quit`;
+TUI keys: ←/→ period · s source · m metric · p model/project · r refresh · q/Q/Esc quit`;
 
 const fail = (message: string): never => {
   process.stderr.write(`llmusage: ${message}\n`);

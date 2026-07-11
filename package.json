@@ -1,10 +1,11 @@
 {
   "name": "llmusage",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Cross-platform TUI for local Codex, Claude Code, and Grok CLI token usage and API-equivalent cost",
   "type": "module",
   "bin": {
-    "llmusage": "dist/cli.js"
+    "llmusage": "dist/cli.js",
+    "lu": "dist/cli.js"
   },
   "exports": {
     ".": {
@@ -15,6 +16,7 @@
   "files": [
     "dist",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {

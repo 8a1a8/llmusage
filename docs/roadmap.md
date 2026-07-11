@@ -4,6 +4,7 @@
 
 - Native Codex, Claude Code, and Grok CLI adapters
 - Daily, weekly, monthly, and yearly TUI views
+- Per-project views across agents that share a working directory
 - Per-model uncached input, cached input, 5-minute cache write, 1-hour cache write, output, and cost
 - JSON and non-interactive table output
 - Windows and Linux CI/package validation

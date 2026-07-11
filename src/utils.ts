@@ -55,5 +55,11 @@ export const formatTokens = (value: number): string => {
 export const formatUsd = (value: number): string =>
   value < 0.01 && value > 0 ? `$${value.toFixed(4)}` : `$${value.toFixed(2)}`;
 
+export const formatProject = (project: string): string => {
+  if (!project || project === '(unknown)') return '(unknown)';
+  const parts = project.replace(/\\/g, '/').replace(/\/$/, '').split('/').filter(Boolean);
+  return parts.slice(-2).join('/') || project;
+};
+
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);

@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {groupByModel, groupByPeriod, totalsFor} from '../src/aggregate.js';
+import {groupByModel, groupByPeriod, groupByProject, totalsFor} from '../src/aggregate.js';
 import {applyPricing, BUILTIN_PRICING} from '../src/pricing.js';
 import type {UsageRecord} from '../src/types.js';
 
@@ -7,6 +7,7 @@ const base: UsageRecord = {
   timestamp: new Date('2026-07-01T12:00:00Z'),
   source: 'codex',
   model: 'gpt-5',
+  project: 'C:\\work\\alpha',
   sessionId: 'one',
   uncachedInputTokens: 1_000_000,
   cachedInputTokens: 1_000_000,
@@ -29,6 +30,7 @@ describe('pricing and aggregation', () => {
     ];
     expect(totalsFor(records)).toMatchObject({sessions: 2, totalTokens: 6_000_000});
     expect(groupByModel(records)).toHaveLength(1);
+    expect(groupByProject(records)).toMatchObject([{project: 'C:\\work\\alpha', sessions: 2}]);
     expect(groupByPeriod(records, 'day')).toHaveLength(2);
     expect(groupByPeriod(records, 'week')).toHaveLength(2);
     expect(groupByPeriod(records, 'month')).toHaveLength(1);

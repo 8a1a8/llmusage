@@ -66,6 +66,11 @@ export const groupByModel = (records: CostedUsage[]): UsageGroup[] =>
     })
     .sort((a, b) => b.cost - a.cost || b.totalTokens - a.totalTokens);
 
+export const groupByProject = (records: CostedUsage[]): UsageGroup[] =>
+  group(records, record => record.project || '(unknown)')
+    .map(item => ({...item, project: item.key}))
+    .sort((a, b) => b.cost - a.cost || b.totalTokens - a.totalTokens);
+
 export const groupBySource = (records: CostedUsage[]): UsageGroup[] =>
   group(records, record => record.source)
     .map(item => ({...item, source: item.key as Source}))

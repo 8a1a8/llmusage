@@ -1,27 +1,29 @@
 # llmusage
 
-`llmusage` is a local-first terminal dashboard for the token usage and API-equivalent cost of Codex, Claude Code, and Grok CLI sessions. It runs on Windows, Linux, and macOS, reads JSONL directly, and never uploads session content.
+`llmusage` is a local-first terminal dashboard for the token usage and API-equivalent cost of Codex, Claude Code, and Grok CLI sessions. The installed command is `lu` (with `llmusage` retained as an alias). It runs on Windows, Linux, and macOS and never uploads session content.
 
 > API-equivalent cost is an estimate of what the recorded tokens would cost at public API rates. It is not a bill and does not represent the price of a ChatGPT, Claude, or Grok subscription.
 
 ## Run it
 
 ```sh
-npx github:8a1a8/llmusage
+npx --yes --package github:8a1a8/llmusage lu
 ```
+
+The shorter GitHub shorthand, `npx github:8a1a8/llmusage`, also works and launches the same binary.
 
 Or install it globally:
 
 ```sh
-npm install --global https://github.com/8a1a8/llmusage/releases/download/v0.1.0/llmusage-0.1.0.tgz
-llmusage
+npm install --global https://github.com/8a1a8/llmusage/releases/download/v0.1.1/llmusage-0.1.1.tgz
+lu
 ```
 
-The unscoped `llmusage` npm registry name is available but v0.1.0 is distributed from GitHub until registry credentials are configured. The package is already structured for `npx llmusage@latest` after publication.
+The unscoped `llmusage` npm registry name is available but v0.1.1 is distributed from GitHub until registry credentials are configured. The package is already structured for `npx llmusage@latest` after publication.
 
 Node.js 20 or newer is required.
 
-The interactive view refreshes every 30 seconds. Use `←`/`→` to switch day, week, month, and year; `s` to filter sources; `m` to switch between cost and tokens; `r` to refresh; and `q` to quit.
+The interactive view refreshes every 30 seconds. Use `←`/`→` to switch day, week, month, and year; `s` to filter sources; `m` to switch between cost and tokens; `p` to switch between model and project tables; `r` to refresh; and `q`, `Q`, or Esc to quit. The active source filter is shown near the top, while the Sources row always shows every detected source.
 
 ## What it reads
 
@@ -29,31 +31,31 @@ The interactive view refreshes every 30 seconds. Use `←`/`→` to switch day, 
 | --- | --- | --- | --- |
 | Codex | `~/.codex/sessions/**/*.jsonl` | Uncached input, cached input, output, reasoning | Exact recorded token deltas |
 | Claude Code | `~/.claude/projects/**/*.jsonl` | Input, cache creation, cache reads, output | Exact recorded message usage |
-| Grok CLI / Grok Build | `~/.grok/sessions/**/updates.jsonl` | Combined prompt context | Estimated; local logs do not expose the complete billing split |
+| Grok CLI / Grok Build | `~/.grok/sessions/**/{updates.jsonl,signals.json}` | Combined prompt context | Estimated; local logs do not expose the complete billing split |
 | Generic API JSONL | User-provided paths | OpenAI-compatible input, cached input, output | Exact when a `usage` object is present |
 
-Malformed and incomplete trailing JSONL lines are skipped, which keeps interrupted sessions readable. Files are streamed rather than loaded into memory in full.
+Malformed and incomplete trailing JSONL lines are skipped, which keeps interrupted sessions readable. Files are streamed rather than loaded into memory in full. Usage can be grouped by project, combining records from different agents that share the same working directory.
 
 ## Commands
 
 ```sh
 # Interactive dashboard using all detected sources
-llmusage
+lu
 
 # Non-interactive tables
-llmusage --no-tui --period week
+lu --no-tui --period week
 
 # JSON for scripts or jq
-llmusage --json --since 2026-07-01 --source codex --source claude
+lu --json --since 2026-07-01 --source codex --source claude
 
 # Scan explicit files or directories
-llmusage ./sessions /mnt/archive/sessions.jsonl
+lu ./sessions /mnt/archive/sessions.jsonl
 
 # Use a custom pricing file
-llmusage --pricing ./pricing.json
+lu --pricing ./pricing.json
 ```
 
-Run `llmusage --help` for all options.
+Run `lu --help` for all options. `llmusage` remains available for compatibility.
 
 ## Cost calculation
 
@@ -86,7 +88,7 @@ The built-in table covers common OpenAI/Codex, Anthropic Claude, and xAI Grok mo
 
 Rules are checked in order and custom rules take precedence over built-ins. `pattern` is a case-insensitive JavaScript regular expression. Omit `source` to match the model name from any source.
 
-Published rates are based on the [OpenAI model pages](https://developers.openai.com/api/docs/models), [Anthropic pricing documentation](https://docs.anthropic.com/en/docs/about-claude/pricing), and [xAI pricing documentation](https://docs.x.ai/developers/pricing). Unknown Claude Code aliases use a clearly marked Sonnet-equivalent fallback. Grok 4.5's local session telemetry records combined context totals but not cached/input/output billing categories, so those totals are priced as uncached input and marked estimated.
+Published rates are based on the [OpenAI model pages](https://developers.openai.com/api/docs/models), [Anthropic pricing documentation](https://docs.anthropic.com/en/docs/about-claude/pricing), and [xAI pricing documentation](https://docs.x.ai/developers/pricing). Unknown Claude Code aliases use a clearly marked Sonnet-equivalent fallback. Grok 4.5's local session telemetry records combined context totals but not cached/input/output billing categories, so those totals are priced as uncached input and marked estimated. If detailed Grok prompt updates are unavailable, `signals.json` supplies a marked session-level fallback.
 
 ## Privacy
 

@@ -1,6 +1,6 @@
 import {createReadStream} from 'node:fs';
-import {stat} from 'node:fs/promises';
-import {basename, dirname} from 'node:path';
+import {readFile, stat} from 'node:fs/promises';
+import {basename, dirname, join} from 'node:path';
 import {createInterface} from 'node:readline';
 import type {DiscoveredFile, Source, UsageRecord} from './types.js';
 import {isRecord, parseTimestamp, toNumber} from './utils.js';
@@ -24,6 +24,15 @@ const jsonLines = async function* (path: string): AsyncGenerator<Json> {
 const sessionIdFor = (path: string, source: Source): string =>
   source === 'grok' ? basename(dirname(path)) : basename(path, '.jsonl');
 
+const grokProjectFor = (path: string): string => {
+  const encoded = basename(dirname(dirname(path)));
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return encoded || '(unknown)';
+  }
+};
+
 const delta = (current: Json, previous?: Json): Json => {
   if (!previous) return current;
   const result: Json = {};
@@ -38,8 +47,10 @@ const delta = (current: Json, previous?: Json): Json => {
 export const parseCodex = async (path: string, fallbackTimestamp: Date): Promise<UsageRecord[]> => {
   const records: UsageRecord[] = [];
   let model = 'unknown-codex';
+  let project = '(unknown)';
   let previousTotal: Json | undefined;
   for await (const item of jsonLines(path)) {
+    if (typeof item.payload?.cwd === 'string') project = item.payload.cwd;
     if (item.type === 'turn_context' && typeof item.payload?.model === 'string') model = item.payload.model;
     if (item.type !== 'event_msg' || item.payload?.type !== 'token_count' || !isRecord(item.payload.info)) continue;
     const total = isRecord(item.payload.info.total_token_usage) ? item.payload.info.total_token_usage : undefined;
@@ -55,6 +66,7 @@ export const parseCodex = async (path: string, fallbackTimestamp: Date): Promise
       timestamp: parseTimestamp(item.timestamp, fallbackTimestamp),
       source: 'codex',
       model,
+      project,
       sessionId: sessionIdFor(path, 'codex'),
       uncachedInputTokens: allInput - cached,
       cachedInputTokens: cached,
@@ -70,8 +82,10 @@ export const parseCodex = async (path: string, fallbackTimestamp: Date): Promise
 export const parseClaude = async (path: string, fallbackTimestamp: Date): Promise<UsageRecord[]> => {
   const messages = new Map<string, UsageRecord>();
   let index = 0;
+  let project = '(unknown)';
   for await (const item of jsonLines(path)) {
     index++;
+    if (typeof item.cwd === 'string') project = item.cwd;
     if (item.type !== 'assistant' || !isRecord(item.message) || !isRecord(item.message.usage)) continue;
     const usage = item.message.usage;
     const cacheCreation = isRecord(usage.cache_creation) ? usage.cache_creation : {};
@@ -85,6 +99,7 @@ export const parseClaude = async (path: string, fallbackTimestamp: Date): Promis
       timestamp: parseTimestamp(item.timestamp, fallbackTimestamp),
       source: 'claude',
       model: String(item.message.model ?? 'unknown-claude'),
+      project,
       sessionId: String(item.sessionId ?? sessionIdFor(path, 'claude')),
       uncachedInputTokens: toNumber(usage.input_tokens),
       cachedInputTokens: toNumber(usage.cache_read_input_tokens),
@@ -126,10 +141,11 @@ export const parseGrok = async (path: string, fallbackTimestamp: Date): Promise<
       if (model !== 'unknown-grok') existing.model = model;
     }
   }
-  return [...prompts.values()].map(prompt => ({
+  const records: UsageRecord[] = [...prompts.values()].map(prompt => ({
     timestamp: prompt.timestamp,
     source: 'grok',
     model: prompt.model,
+    project: grokProjectFor(path),
     sessionId: sessionIdFor(path, 'grok'),
     uncachedInputTokens: prompt.maxTokens,
     cachedInputTokens: 0,
@@ -140,6 +156,35 @@ export const parseGrok = async (path: string, fallbackTimestamp: Date): Promise<
     estimated: true,
     estimationNote: 'Grok local logs expose combined per-prompt context totals; priced as uncached input.'
   }));
+  return records.length ? records : parseGrokSignals(path, fallbackTimestamp);
+};
+
+export const parseGrokSignals = async (path: string, fallbackTimestamp: Date): Promise<UsageRecord[]> => {
+  const signalsPath = basename(path).toLowerCase() === 'signals.json' ? path : join(dirname(path), 'signals.json');
+  try {
+    const value: unknown = JSON.parse(await readFile(signalsPath, 'utf8'));
+    if (!isRecord(value)) return [];
+    const tokens = toNumber(value.contextTokensUsed) + toNumber(value.totalTokensBeforeCompaction);
+    if (!tokens) return [];
+    return [{
+      timestamp: fallbackTimestamp,
+      source: 'grok',
+      model: String(value.primaryModelId ?? (Array.isArray(value.modelsUsed) ? value.modelsUsed[0] : undefined) ?? 'unknown-grok'),
+      project: grokProjectFor(signalsPath),
+      sessionId: sessionIdFor(signalsPath, 'grok'),
+      uncachedInputTokens: tokens,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      cacheWrite1hTokens: 0,
+      outputTokens: 0,
+      reasoningTokens: 0,
+      estimated: true,
+      estimationNote: 'Grok signals expose combined context totals; priced as uncached input.'
+    }];
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
 };
 
 const genericUsage = (item: Json): Json | undefined => {
@@ -152,8 +197,11 @@ const genericUsage = (item: Json): Json | undefined => {
 export const parseGeneric = async (path: string, fallbackTimestamp: Date): Promise<UsageRecord[]> => {
   const records: UsageRecord[] = [];
   let index = 0;
+  let project = '(unknown)';
   for await (const item of jsonLines(path)) {
     index++;
+    if (typeof item.cwd === 'string') project = item.cwd;
+    else if (typeof item.project === 'string') project = item.project;
     const usage = genericUsage(item);
     if (!usage) continue;
     const allInput = toNumber(usage.input_tokens || usage.prompt_tokens);
@@ -174,6 +222,7 @@ export const parseGeneric = async (path: string, fallbackTimestamp: Date): Promi
       timestamp: parseTimestamp(item.timestamp ?? item.created_at ?? item.created, fallbackTimestamp),
       source: 'generic',
       model: String(item.model ?? item.message?.model ?? item.response?.model ?? 'unknown'),
+      project,
       sessionId: String(item.session_id ?? item.sessionId ?? `${sessionIdFor(path, 'generic')}:${index}`),
       uncachedInputTokens: Math.max(0, allInput - cached),
       cachedInputTokens: cached,
@@ -204,6 +253,10 @@ export const parseFile = async (file: DiscoveredFile): Promise<UsageRecord[]> =>
   const source = file.source === 'generic' ? await detectSource(file.path) : file.source;
   if (source === 'codex') return parseCodex(file.path, fallback);
   if (source === 'claude') return parseClaude(file.path, fallback);
-  if (source === 'grok') return parseGrok(file.path, fallback);
+  if (source === 'grok') {
+    return basename(file.path).toLowerCase() === 'signals.json'
+      ? parseGrokSignals(file.path, fallback)
+      : parseGrok(file.path, fallback);
+  }
   return parseGeneric(file.path, fallback);
 };
