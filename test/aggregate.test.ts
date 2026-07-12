@@ -42,4 +42,9 @@ describe('pricing and aggregation', () => {
     expect(applyPricing({...sonnet, timestamp: new Date('2026-07-10')}, BUILTIN_PRICING).cost).toBe(2);
     expect(applyPricing({...sonnet, timestamp: new Date('2026-09-10')}, BUILTIN_PRICING).cost).toBe(3);
   });
+
+  it('applies Claude model pricing to Claude Desktop records', () => {
+    const desktop = {...base, source: 'claude-desktop' as const, model: 'claude-sonnet-5', cachedInputTokens: 0, outputTokens: 0};
+    expect(applyPricing(desktop, BUILTIN_PRICING).cost).toBe(2);
+  });
 });

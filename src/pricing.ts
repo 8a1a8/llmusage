@@ -61,7 +61,7 @@ export const loadPricing = async (path?: string): Promise<PricingRule[]> => {
 
 export const findPricing = (model: string, source: Source, rules: PricingRule[], at = new Date()): PricingRule | undefined =>
   rules.find(rule =>
-    (!rule.source || rule.source === source) &&
+    (!rule.source || rule.source === source || (source === 'claude-desktop' && rule.source === 'claude')) &&
     (!rule.startsAt || at >= new Date(rule.startsAt)) &&
     (!rule.endsAt || at <= new Date(rule.endsAt)) &&
     new RegExp(rule.pattern, 'i').test(model)

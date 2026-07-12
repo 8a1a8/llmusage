@@ -1,6 +1,6 @@
 # llmusage
 
-`llmusage` is a local-first terminal dashboard for the token usage and API-equivalent cost of Codex, Claude Code, and Grok CLI sessions. The installed command is `lu` (with `llmusage` retained as an alias). It runs on Windows, Linux, and macOS and never uploads session content.
+`llmusage` is a local-first terminal dashboard for the token usage and API-equivalent cost of Codex, Claude Code, Claude Desktop Cowork, and Grok CLI sessions. The installed command is `lu` (with `llmusage` retained as an alias). It runs on Windows, Linux, and macOS and never uploads session content.
 
 > API-equivalent cost is an estimate of what the recorded tokens would cost at public API rates. It is not a bill and does not represent the price of a ChatGPT, Claude, or Grok subscription.
 
@@ -15,11 +15,11 @@ The shorter GitHub shorthand, `npx github:8a1a8/llmusage`, also works and launch
 Or install it globally:
 
 ```sh
-npm install --global https://github.com/8a1a8/llmusage/releases/download/v0.1.2/llmusage-0.1.2.tgz
+npm install --global https://github.com/8a1a8/llmusage/releases/download/v0.1.3/llmusage-0.1.3.tgz
 lu
 ```
 
-The unscoped `llmusage` npm registry name is available but v0.1.2 is distributed from GitHub until registry credentials are configured. The package is already structured for `npx llmusage@latest` after publication.
+The unscoped `llmusage` npm registry name is available but v0.1.3 is distributed from GitHub until registry credentials are configured. The package is already structured for `npx llmusage@latest` after publication.
 
 Node.js 20 or newer is required.
 
@@ -31,10 +31,13 @@ The interactive view refreshes every 30 seconds. Use `←`/`→` to switch day, 
 | --- | --- | --- | --- |
 | Codex | `~/.codex/sessions/**/*.jsonl` | Uncached input, cached input, output, reasoning | Exact recorded token deltas |
 | Claude Code | `~/.claude/projects/**/*.jsonl` | Input, cache creation, cache reads, output | Exact recorded message usage |
+| Claude Desktop Cowork | Platform Claude app data under `local-agent-mode-sessions/**/.claude/projects/**/*.jsonl` | Input, cache creation, cache reads, output | Exact recorded message usage |
 | Grok CLI / Grok Build | `~/.grok/sessions/**/{updates.jsonl,signals.json}` | Combined prompt context | Estimated; local logs do not expose the complete billing split |
 | Generic API JSONL | User-provided paths | OpenAI-compatible input, cached input, output | Exact when a `usage` object is present |
 
 Malformed and incomplete trailing JSONL lines are skipped, which keeps interrupted sessions readable. Files are streamed rather than loaded into memory in full. Usage can be grouped by project, combining records from different agents that share the same working directory.
+
+Claude Desktop discovery covers local Cowork/agent sessions. On Windows it reads `%APPDATA%\Claude\local-agent-mode-sessions`; on macOS, `~/Library/Application Support/Claude/local-agent-mode-sessions`; and on Linux, `$XDG_CONFIG_HOME/Claude/local-agent-mode-sessions` (including the lowercase app-directory variant). The selected Cowork folder is used as the project; sessions without a selected folder are grouped as `Claude Desktop/Cowork`. If the same Claude session exists in both Claude Code and Desktop storage, it is counted once. Synced claude.ai chats are not counted because the local Chromium cache does not expose authoritative token usage; Anthropic's data export contains conversation history, not API billing counters.
 
 ## Refresh and memory behavior
 

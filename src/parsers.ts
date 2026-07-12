@@ -1,6 +1,6 @@
 import {createReadStream} from 'node:fs';
 import {readFile, stat} from 'node:fs/promises';
-import {basename, dirname, join} from 'node:path';
+import {basename, dirname, join, normalize, sep} from 'node:path';
 import {createInterface} from 'node:readline';
 import type {DiscoveredFile, Source, UsageRecord} from './types.js';
 import {isRecord, parseTimestamp, toNumber} from './utils.js';
@@ -79,13 +79,39 @@ export const parseCodex = async (path: string, fallbackTimestamp: Date): Promise
   return records;
 };
 
-export const parseClaude = async (path: string, fallbackTimestamp: Date): Promise<UsageRecord[]> => {
+const claudeDesktopProject = async (path: string): Promise<string | undefined> => {
+  const normalized = normalize(path);
+  const marker = `${sep}.claude${sep}projects${sep}`;
+  const markerIndex = normalized.toLowerCase().indexOf(marker);
+  if (markerIndex < 0) return undefined;
+  const metadataPath = `${normalized.slice(0, markerIndex)}.json`;
+  try {
+    const value: unknown = JSON.parse(await readFile(metadataPath, 'utf8'));
+    if (!isRecord(value)) return undefined;
+    const folders = value.userSelectedFolders;
+    if (Array.isArray(folders)) {
+      const selected = folders.find(folder => typeof folder === 'string' && folder.length > 0);
+      if (typeof selected === 'string') return selected;
+    }
+    if (typeof folders === 'string' && folders.length > 0) return folders;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  return undefined;
+};
+
+export const parseClaude = async (
+  path: string,
+  fallbackTimestamp: Date,
+  source: 'claude' | 'claude-desktop' = 'claude'
+): Promise<UsageRecord[]> => {
   const messages = new Map<string, UsageRecord>();
   let index = 0;
-  let project = '(unknown)';
+  const desktopProject = source === 'claude-desktop' ? await claudeDesktopProject(path) : undefined;
+  let project = desktopProject ?? (source === 'claude-desktop' ? 'Claude Desktop/Cowork' : '(unknown)');
   for await (const item of jsonLines(path)) {
     index++;
-    if (typeof item.cwd === 'string') project = item.cwd;
+    if (source === 'claude' && typeof item.cwd === 'string') project = item.cwd;
     if (item.type !== 'assistant' || !isRecord(item.message) || !isRecord(item.message.usage)) continue;
     const usage = item.message.usage;
     const cacheCreation = isRecord(usage.cache_creation) ? usage.cache_creation : {};
@@ -97,10 +123,10 @@ export const parseClaude = async (path: string, fallbackTimestamp: Date): Promis
     const id = String(item.message.id ?? item.uuid ?? index);
     const current: UsageRecord = {
       timestamp: parseTimestamp(item.timestamp, fallbackTimestamp),
-      source: 'claude',
+      source,
       model: String(item.message.model ?? 'unknown-claude'),
       project,
-      sessionId: String(item.sessionId ?? sessionIdFor(path, 'claude')),
+      sessionId: String(item.sessionId ?? sessionIdFor(path, source)),
       uncachedInputTokens: toNumber(usage.input_tokens),
       cachedInputTokens: toNumber(usage.cache_read_input_tokens),
       cacheWriteTokens: cacheWrite,
@@ -252,7 +278,7 @@ export const parseFile = async (file: DiscoveredFile): Promise<UsageRecord[]> =>
   const fallback = info.mtime;
   const source = file.source === 'generic' ? await detectSource(file.path) : file.source;
   if (source === 'codex') return parseCodex(file.path, fallback);
-  if (source === 'claude') return parseClaude(file.path, fallback);
+  if (source === 'claude' || source === 'claude-desktop') return parseClaude(file.path, fallback, source);
   if (source === 'grok') {
     return basename(file.path).toLowerCase() === 'signals.json'
       ? parseGrokSignals(file.path, fallback)

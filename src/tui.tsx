@@ -6,7 +6,7 @@ import type {Period, ScanOptions, ScanResult, Source} from './types.js';
 import {formatProject, formatTokens, formatUsd} from './utils.js';
 
 const periods: Period[] = ['day', 'week', 'month', 'year'];
-const sources: Array<Source | undefined> = [undefined, 'codex', 'claude', 'grok', 'generic'];
+const sources: Array<Source | undefined> = [undefined, 'codex', 'claude', 'claude-desktop', 'grok', 'generic'];
 
 interface AppProps {
   initial: ScanResult;

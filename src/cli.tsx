@@ -10,7 +10,7 @@ import type {Period, Source} from './types.js';
 
 const help = `llmusage ${packageJson.version}
 
-Inspect local Codex, Claude Code, and Grok CLI JSONL sessions.
+Inspect local Codex, Claude Code, Claude Desktop, and Grok CLI JSONL sessions.
 
 Usage:
   lu [paths...] [options]
@@ -18,7 +18,7 @@ Usage:
 
 Options:
   --path <path>       Additional JSONL file or directory (repeatable)
-  --source <source>   codex, claude, grok, or generic (repeatable)
+  --source <source>   codex, claude, claude-desktop, grok, or generic (repeatable)
   --period <period>   day, week, month, or year (default: day)
   --since <date>      Include usage on/after YYYY-MM-DD
   --until <date>      Include usage on/before YYYY-MM-DD
@@ -76,9 +76,9 @@ const main = async (): Promise<void> => {
   if (!validPeriods.includes(period)) fail(`Unknown period "${period}".`);
 
   const requestedSources = values.source as string[] | undefined;
-  const validSources: Source[] = ['codex', 'claude', 'grok', 'generic'];
+  const validSources: Source[] = ['codex', 'claude', 'claude-desktop', 'grok', 'generic'];
   if (requestedSources?.some(source => !validSources.includes(source as Source))) {
-    fail('Source must be codex, claude, grok, or generic.');
+    fail('Source must be codex, claude, claude-desktop, grok, or generic.');
   }
 
   const refreshSeconds = Number(one(values.refresh));

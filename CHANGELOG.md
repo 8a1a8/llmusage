@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.3 — 2026-07-12
+
+- Discover and analyze exact Claude Desktop Cowork/agent session usage on Windows, macOS, and Linux.
+- Report Claude Desktop as a separate source while applying the matching Anthropic model rates.
+- Attribute Desktop usage to its selected folder for project aggregation.
+- Ignore audit trails and deduplicate sessions mirrored between Claude Desktop and Claude Code storage.
+
 ## 0.1.2 — 2026-07-12
 
 - Fix long-running TUI heap exhaustion caused by repeatedly reparsing the full session history.

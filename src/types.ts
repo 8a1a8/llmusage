@@ -1,4 +1,4 @@
-export type Source = 'codex' | 'claude' | 'grok' | 'generic';
+export type Source = 'codex' | 'claude' | 'claude-desktop' | 'grok' | 'generic';
 export type Period = 'day' | 'week' | 'month' | 'year';
 
 export interface UsageRecord {
