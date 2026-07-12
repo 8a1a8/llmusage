@@ -1,6 +1,6 @@
 {
   "name": "llmusage",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Cross-platform TUI for local Codex, Claude Code, and Grok CLI token usage and API-equivalent cost",
   "type": "module",
   "bin": {
@@ -24,6 +24,7 @@
     "dev": "tsx src/cli.tsx",
     "test": "vitest run",
     "test:watch": "vitest",
+    "memory:probe": "npm run build && node --expose-gc scripts/memory-probe.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prepare": "npm run build",
     "prepack": "npm run build && npm test"

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.2 — 2026-07-12
+
+- Fix long-running TUI heap exhaustion caused by repeatedly reparsing the full session history.
+- Prune default session files whose modification time predates `--since`.
+- Cache parsed records by file path, size, and modification time with bounded invalidation.
+- Reuse immutable results and skip TUI repaints when no session file changed.
+- Add repeated-scan memory diagnostics and incremental cache regression coverage.
+
 ## 0.1.1 — 2026-07-10
 
 - Add `lu` as the preferred executable alias while retaining `llmusage`.

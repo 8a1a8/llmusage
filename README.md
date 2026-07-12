@@ -15,11 +15,11 @@ The shorter GitHub shorthand, `npx github:8a1a8/llmusage`, also works and launch
 Or install it globally:
 
 ```sh
-npm install --global https://github.com/8a1a8/llmusage/releases/download/v0.1.1/llmusage-0.1.1.tgz
+npm install --global https://github.com/8a1a8/llmusage/releases/download/v0.1.2/llmusage-0.1.2.tgz
 lu
 ```
 
-The unscoped `llmusage` npm registry name is available but v0.1.1 is distributed from GitHub until registry credentials are configured. The package is already structured for `npx llmusage@latest` after publication.
+The unscoped `llmusage` npm registry name is available but v0.1.2 is distributed from GitHub until registry credentials are configured. The package is already structured for `npx llmusage@latest` after publication.
 
 Node.js 20 or newer is required.
 
@@ -35,6 +35,10 @@ The interactive view refreshes every 30 seconds. Use `←`/`→` to switch day, 
 | Generic API JSONL | User-provided paths | OpenAI-compatible input, cached input, output | Exact when a `usage` object is present |
 
 Malformed and incomplete trailing JSONL lines are skipped, which keeps interrupted sessions readable. Files are streamed rather than loaded into memory in full. Usage can be grouped by project, combining records from different agents that share the same working directory.
+
+## Refresh and memory behavior
+
+The TUI keeps a bounded in-process cache keyed by file path, size, and modification time. Unchanged files are not reparsed, deleted or out-of-range files are evicted, and the screen is not repainted when the resulting usage data is unchanged. With automatic discovery, `--since` also skips session files whose modification time proves they cannot contain in-range records. Explicit file and directory arguments are always inspected fully so archived files with preserved timestamps remain correct.
 
 ## Commands
 
@@ -102,6 +106,7 @@ npm test
 npm run typecheck
 npm run build
 npm pack
+npm run memory:probe
 ```
 
 The package is MIT licensed. Issues and pull requests are welcome.

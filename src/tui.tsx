@@ -98,9 +98,9 @@ export const App = ({initial, options, initialPeriod, refreshMs}: AppProps) => {
   const [sourceIndex, setSourceIndex] = useState(0);
   const [metric, setMetric] = useState<'cost' | 'tokens'>('cost');
   const [breakdown, setBreakdown] = useState<'model' | 'project'>('model');
-  const [loading, setLoading] = useState(false);
   const scanning = useRef(false);
   const quitting = useRef(false);
+  const resultRef = useRef(initial);
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const period = periods[Math.max(0, periodIndex)];
   const source = sources[sourceIndex];
@@ -119,13 +119,15 @@ export const App = ({initial, options, initialPeriod, refreshMs}: AppProps) => {
   const refresh = async () => {
     if (scanning.current) return;
     scanning.current = true;
-    setLoading(true);
     try {
-      setResult(await scanUsage(options));
-      setLastUpdated(new Date());
+      const next = await scanUsage(options);
+      if (next !== resultRef.current) {
+        resultRef.current = next;
+        setResult(next);
+        setLastUpdated(new Date());
+      }
     } finally {
       scanning.current = false;
-      setLoading(false);
     }
   };
 
@@ -166,7 +168,7 @@ export const App = ({initial, options, initialPeriod, refreshMs}: AppProps) => {
     <Box flexDirection="column" paddingX={1}>
       <Box justifyContent="space-between">
         <Text bold color="cyan">lu <Text dimColor>(llmusage)</Text></Text>
-        <Text dimColor>{loading ? 'scanning…' : `updated ${lastUpdated.toLocaleTimeString()}`}</Text>
+        <Text dimColor>updated {lastUpdated.toLocaleTimeString()}</Text>
       </Box>
       <Text dimColor>{result.files.length} usage files · {totals.sessions} sessions · filter <Text bold color="cyan">{source ?? 'all'}</Text> · {period} view</Text>
 
