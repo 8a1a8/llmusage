@@ -7,6 +7,12 @@ import {isRecord, parseTimestamp, toNumber} from './utils.js';
 
 type Json = Record<string, any>;
 
+export interface CodexSessionMetadata {
+  rolloutId: string;
+  parentSessionId?: string;
+  replay: boolean;
+}
+
 const jsonLines = async function* (path: string): AsyncGenerator<Json> {
   const input = createReadStream(path, {encoding: 'utf8'});
   const lines = createInterface({input, crlfDelay: Infinity});
@@ -23,6 +29,22 @@ const jsonLines = async function* (path: string): AsyncGenerator<Json> {
 
 const sessionIdFor = (path: string, source: Source): string =>
   source === 'grok' ? basename(dirname(path)) : basename(path, '.jsonl');
+
+export const readCodexSessionMetadata = async (path: string): Promise<CodexSessionMetadata> => {
+  const fallback = sessionIdFor(path, 'codex');
+  for await (const item of jsonLines(path)) {
+    if (item.type !== 'session_meta' || !isRecord(item.payload)) continue;
+    const rolloutId = typeof item.payload.id === 'string' ? item.payload.id : fallback;
+    const parentSessionId = [item.payload.session_id, item.payload.parent_thread_id, item.payload.forked_from_id]
+      .find(value => typeof value === 'string' && value.length > 0 && value !== rolloutId);
+    return {
+      rolloutId,
+      parentSessionId: typeof parentSessionId === 'string' ? parentSessionId : undefined,
+      replay: typeof parentSessionId === 'string'
+    };
+  }
+  return {rolloutId: fallback, replay: false};
+};
 
 const grokProjectFor = (path: string): string => {
   const encoded = basename(dirname(dirname(path)));
@@ -44,20 +66,58 @@ const delta = (current: Json, previous?: Json): Json => {
   return result;
 };
 
-export const parseCodex = async (path: string, fallbackTimestamp: Date): Promise<UsageRecord[]> => {
+const codexUsageSignature = (usage: Json | undefined): string => {
+  if (!usage) return '-';
+  return [
+    usage.input_tokens,
+    usage.cached_input_tokens,
+    usage.output_tokens,
+    usage.reasoning_output_tokens,
+    usage.total_tokens
+  ].map(toNumber).join(',');
+};
+
+const codexTokenSignature = (model: string, info: Json): string => {
+  const total = isRecord(info.total_token_usage) ? info.total_token_usage : undefined;
+  const last = isRecord(info.last_token_usage) ? info.last_token_usage : undefined;
+  return `${model}\u001e${codexUsageSignature(total)}\u001e${codexUsageSignature(last)}`;
+};
+
+export const readCodexTokenSignatures = async (path: string): Promise<string[]> => {
+  const signatures: string[] = [];
+  let model = 'unknown-codex';
+  for await (const item of jsonLines(path)) {
+    if (item.type === 'turn_context' && typeof item.payload?.model === 'string') model = item.payload.model;
+    if (item.type !== 'event_msg' || item.payload?.type !== 'token_count' || !isRecord(item.payload.info)) continue;
+    signatures.push(codexTokenSignature(model, item.payload.info));
+  }
+  return signatures;
+};
+
+export const parseCodex = async (
+  path: string,
+  fallbackTimestamp: Date,
+  replayPrefix?: readonly string[]
+): Promise<UsageRecord[]> => {
   const records: UsageRecord[] = [];
   let model = 'unknown-codex';
   let project = '(unknown)';
   let previousTotal: Json | undefined;
+  let replayIndex = 0;
+  let matchingReplayPrefix = Boolean(replayPrefix?.length);
   for await (const item of jsonLines(path)) {
     if (typeof item.payload?.cwd === 'string') project = item.payload.cwd;
     if (item.type === 'turn_context' && typeof item.payload?.model === 'string') model = item.payload.model;
     if (item.type !== 'event_msg' || item.payload?.type !== 'token_count' || !isRecord(item.payload.info)) continue;
+    const copiedFromParent = matchingReplayPrefix && replayIndex < replayPrefix!.length &&
+      codexTokenSignature(model, item.payload.info) === replayPrefix![replayIndex];
+    if (copiedFromParent) replayIndex++;
+    else matchingReplayPrefix = false;
     const total = isRecord(item.payload.info.total_token_usage) ? item.payload.info.total_token_usage : undefined;
     const last = isRecord(item.payload.info.last_token_usage) ? item.payload.info.last_token_usage : undefined;
     const usage = total ? delta(total, previousTotal) : last;
     if (total) previousTotal = total;
-    if (!usage) continue;
+    if (!usage || copiedFromParent) continue;
     const allInput = toNumber(usage.input_tokens);
     const cached = Math.min(allInput, toNumber(usage.cached_input_tokens));
     const output = toNumber(usage.output_tokens);

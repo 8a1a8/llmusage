@@ -15,11 +15,11 @@ The shorter GitHub shorthand, `npx github:8a1a8/llmusage`, also works and launch
 Or install it globally:
 
 ```sh
-npm install --global https://github.com/8a1a8/llmusage/releases/download/v0.1.4/llmusage-0.1.4.tgz
+npm install --global https://github.com/8a1a8/llmusage/releases/download/v0.1.5/llmusage-0.1.5.tgz
 lu
 ```
 
-The unscoped `llmusage` npm registry name is available but v0.1.4 is distributed from GitHub until registry credentials are configured. The package is already structured for `npx llmusage@latest` after publication.
+The unscoped `llmusage` npm registry name is available but v0.1.5 is distributed from GitHub until registry credentials are configured. The package is already structured for `npx llmusage@latest` after publication.
 
 Node.js 20 or newer is required.
 
@@ -36,6 +36,8 @@ The interactive view refreshes every 30 seconds. Use `←`/`→` to switch day, 
 | Generic API JSONL | User-provided paths | OpenAI-compatible input, cached input, output | Exact when a `usage` object is present |
 
 Malformed and incomplete trailing JSONL lines are skipped, which keeps interrupted sessions readable. Files are streamed rather than loaded into memory in full. Usage can be grouped by project, combining records from different agents that share the same working directory.
+
+Codex Desktop fork and subagent rollouts can contain a timestamp-rewritten copy of their parent history. `llmusage` compares the recorded token-counter sequence with the parent rollout, ignores the copied prefix, and retains usage generated after the fork diverges.
 
 Claude Desktop discovery covers local Cowork/agent sessions. On Windows it reads `%APPDATA%\Claude\local-agent-mode-sessions`; on macOS, `~/Library/Application Support/Claude/local-agent-mode-sessions`; and on Linux, `$XDG_CONFIG_HOME/Claude/local-agent-mode-sessions` (including the lowercase app-directory variant). The selected Cowork folder is used as the project; sessions without a selected folder are grouped as `Claude Desktop/Cowork`. If the same Claude session exists in both Claude Code and Desktop storage, it is counted once. Synced claude.ai chats are not counted because the local Chromium cache does not expose authoritative token usage; Anthropic's data export contains conversation history, not API billing counters.
 

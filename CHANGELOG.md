@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.5 — 2026-07-13
+
+- Deduplicate Codex Desktop fork/replay histories against their parent token-counter sequence while retaining new usage after the fork diverges.
+
 ## 0.1.4 — 2026-07-13
 
 - Fix live-update heap exhaustion on large all-history TUI scans.

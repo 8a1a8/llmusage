@@ -1,6 +1,13 @@
 import {stat} from 'node:fs/promises';
+import {basename} from 'node:path';
 import {discoverFiles} from './discovery.js';
-import {parseFile} from './parsers.js';
+import {
+  parseCodex,
+  parseFile,
+  readCodexSessionMetadata,
+  readCodexTokenSignatures,
+  type CodexSessionMetadata
+} from './parsers.js';
 import {applyPricing, loadPricing} from './pricing.js';
 import type {CostedUsage, DiscoveredFile, PricingRule, ScanOptions, ScanResult, UsageRecord} from './types.js';
 
@@ -15,6 +22,12 @@ interface ParseCacheEntry {
   source: DiscoveredFile['source'];
   selection: string;
   records: CostedUsage[];
+}
+
+interface CodexPrefixCacheEntry {
+  size: number;
+  mtimeMs: number;
+  signatures: string[];
 }
 
 export interface UsageScanner {
@@ -116,12 +129,15 @@ const priceRecords = (records: UsageRecord[], pricing: PricingRule[], options: S
 
 export const createUsageScanner = (): UsageScanner => {
   const parseCache = new Map<string, ParseCacheEntry>();
+  const codexMetadataCache = new Map<string, CodexSessionMetadata>();
+  const codexPrefixCache = new Map<string, CodexPrefixCacheEntry>();
   let cachedPricingStamp: string | undefined;
   let lastKey: string | undefined;
   let lastResult: ScanResult | undefined;
 
   const parseAll = async (
     snapshots: FileSnapshot[],
+    discoveredFiles: DiscoveredFile[],
     warnings: string[],
     pricing: PricingRule[],
     options: ScanOptions
@@ -139,6 +155,64 @@ export const createUsageScanner = (): UsageScanner => {
       if (!activePaths.has(path)) parseCache.delete(path);
     }
 
+    const codexPathById = new Map<string, string>();
+    for (const file of discoveredFiles) {
+      if (file.source !== 'codex') continue;
+      const match = basename(file.path, '.jsonl').match(/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/i);
+      if (match) codexPathById.set(match[1].toLowerCase(), file.path);
+    }
+
+    const metadataByPath = new Map<string, CodexSessionMetadata>();
+    const metadataQueue = snapshots.filter(file => file.source === 'codex');
+    const metadataWorker = async (): Promise<void> => {
+      for (;;) {
+        const file = metadataQueue.shift();
+        if (!file) return;
+        try {
+          let metadata = codexMetadataCache.get(file.path);
+          if (!metadata) {
+            metadata = await readCodexSessionMetadata(file.path);
+            codexMetadataCache.set(file.path, metadata);
+          }
+          metadataByPath.set(file.path, metadata);
+        } catch (error) {
+          warnings.push(`Could not inspect Codex session metadata in ${file.path}: ${(error as Error).message}`);
+        }
+      }
+    };
+    await Promise.all(Array.from({length: Math.min(16, metadataQueue.length)}, metadataWorker));
+
+    const pendingPrefixes = new Map<string, Promise<string[]>>();
+    const loadPrefix = (path: string): Promise<string[]> => {
+      const pending = pendingPrefixes.get(path);
+      if (pending) return pending;
+      const promise = (async () => {
+        const info = await stat(path);
+        const cached = codexPrefixCache.get(path);
+        if (cached && cached.size === info.size && cached.mtimeMs === info.mtimeMs) return cached.signatures;
+        const signatures = await readCodexTokenSignatures(path);
+        codexPrefixCache.set(path, {size: info.size, mtimeMs: info.mtimeMs, signatures});
+        return signatures;
+      })();
+      pendingPrefixes.set(path, promise);
+      return promise;
+    };
+
+    const replayPrefixes = new Map<string, readonly string[]>();
+    await Promise.all([...metadataByPath].map(async ([path, metadata]) => {
+      if (!metadata.replay || !metadata.parentSessionId) return;
+      const parentPath = codexPathById.get(metadata.parentSessionId.toLowerCase());
+      if (!parentPath) {
+        warnings.push(`Could not find parent Codex session ${metadata.parentSessionId} for ${path}; replayed usage may be duplicated.`);
+        return;
+      }
+      try {
+        replayPrefixes.set(path, await loadPrefix(parentPath));
+      } catch (error) {
+        warnings.push(`Could not read parent Codex session ${parentPath}: ${(error as Error).message}`);
+      }
+    }));
+
     const worker = async (): Promise<void> => {
       for (;;) {
         const file = queue.shift();
@@ -155,7 +229,10 @@ export const createUsageScanner = (): UsageScanner => {
           continue;
         }
         try {
-          const records = priceRecords(await parseFile(file), pricing, options);
+          const parsed = file.source === 'codex'
+            ? await parseCodex(file.path, new Date(file.mtimeMs), replayPrefixes.get(file.path))
+            : await parseFile(file);
+          const records = priceRecords(parsed, pricing, options);
           parseCache.set(file.path, {
             size: file.size,
             mtimeMs: file.mtimeMs,
@@ -191,7 +268,7 @@ export const createUsageScanner = (): UsageScanner => {
         cachedPricingStamp = priceStamp;
       }
       const pricing = await loadPricing(options.pricingFile);
-      const records = (await parseAll(snapshots, warnings, pricing, options))
+      const records = (await parseAll(snapshots, discovered.files, warnings, pricing, options))
         .sort((a, b) => a.timestamp.valueOf() - b.timestamp.valueOf());
       const unknownPricing = new Set(records.filter(record => !record.pricing).map(record => `${record.source}/${record.model}`));
       for (const model of unknownPricing) warnings.push(`No pricing rule matched ${model}; cost is shown as $0 and marked estimated.`);
@@ -203,6 +280,8 @@ export const createUsageScanner = (): UsageScanner => {
     },
     clear(): void {
       parseCache.clear();
+      codexMetadataCache.clear();
+      codexPrefixCache.clear();
       cachedPricingStamp = undefined;
       lastKey = undefined;
       lastResult = undefined;

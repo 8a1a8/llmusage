@@ -1,6 +1,6 @@
 {
   "name": "llmusage",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Cross-platform TUI for local Codex, Claude Code, Claude Desktop, and Grok CLI token usage and API-equivalent cost",
   "type": "module",
   "bin": {

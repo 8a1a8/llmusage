@@ -1,6 +1,6 @@
-import {appendFile, mkdtemp, rm, writeFile} from 'node:fs/promises';
+import {appendFile, mkdir, mkdtemp, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {basename, join} from 'node:path';
 import {afterEach, describe, expect, it} from 'vitest';
 import {groupByModel, groupByPeriod, groupByProject, groupBySource, totalsFor} from '../src/aggregate.js';
 import {createUsageScanner} from '../src/scan.js';
@@ -92,5 +92,55 @@ describe('incremental usage scanner', () => {
 
     expect(changed.records.find(record => record.sessionId === 'stable')).toBe(stable);
     expect(changed.records).toHaveLength(2);
+  });
+
+  it('ignores replayed Codex history while retaining new fork usage', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'llmusage-codex-replay-'));
+    temporaryDirectories.push(directory);
+    const sessions = join(directory, '.codex', 'sessions', '2026', '07', '13');
+    await mkdir(sessions, {recursive: true});
+    const parentId = '11111111-1111-4111-8111-111111111111';
+    const childId = '22222222-2222-4222-8222-222222222222';
+    const parentPath = join(sessions, `rollout-2026-07-01T00-00-00-${parentId}.jsonl`);
+    const childPath = join(sessions, `rollout-2026-07-13T10-00-00-${childId}.jsonl`);
+    const token = (timestamp: string, input: number, cached: number, output: number) => JSON.stringify({
+      timestamp,
+      type: 'event_msg',
+      payload: {type: 'token_count', info: {
+        total_token_usage: {input_tokens: input, cached_input_tokens: cached, output_tokens: output},
+        last_token_usage: {input_tokens: input, cached_input_tokens: cached, output_tokens: output}
+      }}
+    });
+    const parent = [
+      JSON.stringify({timestamp: '2026-07-01T00:00:00Z', type: 'session_meta', payload: {id: parentId}}),
+      JSON.stringify({timestamp: '2026-07-01T00:00:01Z', type: 'turn_context', payload: {model: 'gpt-5', cwd: '/work/parent'}}),
+      token('2026-07-01T00:01:00Z', 100, 20, 10),
+      token('2026-07-01T00:02:00Z', 250, 50, 30)
+    ];
+    await writeFile(parentPath, parent.join('\n'));
+    await writeFile(childPath, [
+      JSON.stringify({timestamp: '2026-07-13T10:00:00Z', type: 'session_meta', payload: {
+        id: childId,
+        session_id: parentId,
+        parent_thread_id: parentId
+      }}),
+      ...parent,
+      token('2026-07-13T10:01:00Z', 300, 60, 40)
+    ].join('\n'));
+
+    const result = await createUsageScanner().scan({
+      paths: [join(directory, '.codex', 'sessions')],
+      since: new Date('2026-07-13T00:00:00Z')
+    });
+
+    expect(result.warnings).toEqual([]);
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]).toMatchObject({
+      source: 'codex',
+      sessionId: basename(childPath, '.jsonl'),
+      uncachedInputTokens: 40,
+      cachedInputTokens: 10,
+      outputTokens: 10
+    });
   });
 });
