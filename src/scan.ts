@@ -2,7 +2,7 @@ import {stat} from 'node:fs/promises';
 import {discoverFiles} from './discovery.js';
 import {parseFile} from './parsers.js';
 import {applyPricing, loadPricing} from './pricing.js';
-import type {DiscoveredFile, ScanOptions, ScanResult, UsageRecord} from './types.js';
+import type {CostedUsage, DiscoveredFile, PricingRule, ScanOptions, ScanResult, UsageRecord} from './types.js';
 
 interface FileSnapshot extends DiscoveredFile {
   size: number;
@@ -13,7 +13,8 @@ interface ParseCacheEntry {
   size: number;
   mtimeMs: number;
   source: DiscoveredFile['source'];
-  records: UsageRecord[];
+  selection: string;
+  records: CostedUsage[];
 }
 
 export interface UsageScanner {
@@ -62,18 +63,77 @@ const resultKey = (
   sources: options.sources,
   since: options.since?.toISOString(),
   until: options.until?.toISOString(),
+  rollup: options.rollup,
   pricing,
   warnings
 });
 
+const dailyTimestamp = (timestamp: Date): Date =>
+  new Date(timestamp.getFullYear(), timestamp.getMonth(), timestamp.getDate());
+
+const rollupKey = (record: CostedUsage): string => JSON.stringify([
+  record.timestamp.getFullYear(),
+  record.timestamp.getMonth(),
+  record.timestamp.getDate(),
+  record.source,
+  record.model,
+  record.project,
+  record.sessionId
+]);
+
+const matchesOptions = (record: UsageRecord, options: ScanOptions): boolean =>
+  (!options.sources?.length || options.sources.includes(record.source)) &&
+  (!options.since || record.timestamp >= options.since) &&
+  (!options.until || record.timestamp <= options.until);
+
+const priceRecords = (records: UsageRecord[], pricing: PricingRule[], options: ScanOptions): CostedUsage[] => {
+  if (!options.rollup) {
+    return records.filter(record => matchesOptions(record, options)).map(record => applyPricing(record, pricing));
+  }
+  const groups = new Map<string, CostedUsage>();
+  for (const record of records) {
+    if (!matchesOptions(record, options)) continue;
+    const priced = applyPricing(record, pricing);
+    const key = rollupKey(priced);
+    const existing = groups.get(key);
+    if (!existing) {
+      groups.set(key, {...priced, timestamp: dailyTimestamp(priced.timestamp)});
+      continue;
+    }
+    existing.uncachedInputTokens += priced.uncachedInputTokens;
+    existing.cachedInputTokens += priced.cachedInputTokens;
+    existing.cacheWriteTokens += priced.cacheWriteTokens;
+    existing.cacheWrite1hTokens += priced.cacheWrite1hTokens;
+    existing.outputTokens += priced.outputTokens;
+    existing.reasoningTokens += priced.reasoningTokens;
+    existing.cost += priced.cost;
+    existing.estimated ||= priced.estimated;
+    existing.pricingEstimated ||= priced.pricingEstimated;
+    if (!existing.estimationNote && priced.estimationNote) existing.estimationNote = priced.estimationNote;
+  }
+  return [...groups.values()];
+};
+
 export const createUsageScanner = (): UsageScanner => {
   const parseCache = new Map<string, ParseCacheEntry>();
+  let cachedPricingStamp: string | undefined;
   let lastKey: string | undefined;
   let lastResult: ScanResult | undefined;
 
-  const parseAll = async (snapshots: FileSnapshot[], warnings: string[]): Promise<UsageRecord[]> => {
-    const output: UsageRecord[] = [];
+  const parseAll = async (
+    snapshots: FileSnapshot[],
+    warnings: string[],
+    pricing: PricingRule[],
+    options: ScanOptions
+  ): Promise<CostedUsage[]> => {
+    const output: CostedUsage[] = [];
     const queue = [...snapshots];
+    const selection = JSON.stringify({
+      sources: options.sources,
+      since: options.since?.toISOString(),
+      until: options.until?.toISOString(),
+      rollup: options.rollup
+    });
     const activePaths = new Set(snapshots.map(file => file.path));
     for (const path of parseCache.keys()) {
       if (!activePaths.has(path)) parseCache.delete(path);
@@ -88,17 +148,19 @@ export const createUsageScanner = (): UsageScanner => {
           cached &&
           cached.size === file.size &&
           cached.mtimeMs === file.mtimeMs &&
-          cached.source === file.source
+          cached.source === file.source &&
+          cached.selection === selection
         ) {
           for (const record of cached.records) output.push(record);
           continue;
         }
         try {
-          const records = await parseFile(file);
+          const records = priceRecords(await parseFile(file), pricing, options);
           parseCache.set(file.path, {
             size: file.size,
             mtimeMs: file.mtimeMs,
             source: file.source,
+            selection,
             records
           });
           for (const record of records) output.push(record);
@@ -124,15 +186,12 @@ export const createUsageScanner = (): UsageScanner => {
       const key = resultKey(snapshots, options, priceStamp, warnings);
       if (key === lastKey && lastResult) return lastResult;
 
-      const [rawRecords, pricing] = await Promise.all([
-        parseAll(snapshots, warnings),
-        loadPricing(options.pricingFile)
-      ]);
-      const records = rawRecords
-        .filter(record => !options.sources?.length || options.sources.includes(record.source))
-        .filter(record => !options.since || record.timestamp >= options.since)
-        .filter(record => !options.until || record.timestamp <= options.until)
-        .map(record => applyPricing(record, pricing))
+      if (cachedPricingStamp !== priceStamp) {
+        parseCache.clear();
+        cachedPricingStamp = priceStamp;
+      }
+      const pricing = await loadPricing(options.pricingFile);
+      const records = (await parseAll(snapshots, warnings, pricing, options))
         .sort((a, b) => a.timestamp.valueOf() - b.timestamp.valueOf());
       const unknownPricing = new Set(records.filter(record => !record.pricing).map(record => `${record.source}/${record.model}`));
       for (const model of unknownPricing) warnings.push(`No pricing rule matched ${model}; cost is shown as $0 and marked estimated.`);
@@ -144,6 +203,7 @@ export const createUsageScanner = (): UsageScanner => {
     },
     clear(): void {
       parseCache.clear();
+      cachedPricingStamp = undefined;
       lastKey = undefined;
       lastResult = undefined;
     }

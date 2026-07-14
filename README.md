@@ -15,11 +15,11 @@ The shorter GitHub shorthand, `npx github:8a1a8/llmusage`, also works and launch
 Or install it globally:
 
 ```sh
-npm install --global https://github.com/8a1a8/llmusage/releases/download/v0.1.3/llmusage-0.1.3.tgz
+npm install --global https://github.com/8a1a8/llmusage/releases/download/v0.1.4/llmusage-0.1.4.tgz
 lu
 ```
 
-The unscoped `llmusage` npm registry name is available but v0.1.3 is distributed from GitHub until registry credentials are configured. The package is already structured for `npx llmusage@latest` after publication.
+The unscoped `llmusage` npm registry name is available but v0.1.4 is distributed from GitHub until registry credentials are configured. The package is already structured for `npx llmusage@latest` after publication.
 
 Node.js 20 or newer is required.
 
@@ -41,7 +41,9 @@ Claude Desktop discovery covers local Cowork/agent sessions. On Windows it reads
 
 ## Refresh and memory behavior
 
-The TUI keeps a bounded in-process cache keyed by file path, size, and modification time. Unchanged files are not reparsed, deleted or out-of-range files are evicted, and the screen is not repainted when the resulting usage data is unchanged. With automatic discovery, `--since` also skips session files whose modification time proves they cannot contain in-range records. Explicit file and directory arguments are always inspected fully so archived files with preserved timestamps remain correct.
+The TUI keeps a bounded in-process cache keyed by file path, size, modification time, pricing catalog, and active filters. Cached records are already priced, so a growing live session does not clone every historical record on each refresh. Interactive and text-table scans use lossless per-session/day/model/project rollups; this preserves every displayed token total, cost, session count, source, project, and day/week/month/year grouping while keeping the React/Ink state compact. `--json` and the library API retain record-level output by default.
+
+Unchanged files are not reparsed, deleted or out-of-range files are evicted, and the screen is not repainted when the resulting usage data is unchanged. With automatic discovery, `--since` also skips session files whose modification time proves they cannot contain in-range records. Explicit file and directory arguments are always inspected fully so archived files with preserved timestamps remain correct.
 
 ## Commands
 
@@ -110,6 +112,7 @@ npm run typecheck
 npm run build
 npm pack
 npm run memory:probe
+npm run memory:tui
 ```
 
 The package is MIT licensed. Issues and pull requests are welcome.

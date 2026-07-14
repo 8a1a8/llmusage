@@ -72,6 +72,7 @@ export interface ScanOptions {
   since?: Date;
   until?: Date;
   pricingFile?: string;
+  rollup?: 'day';
 }
 
 export interface ScanResult {

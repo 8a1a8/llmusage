@@ -85,12 +85,14 @@ const main = async (): Promise<void> => {
   if (!Number.isFinite(refreshSeconds) || refreshSeconds < 1) fail('Refresh must be at least 1 second.');
 
   const paths = [...positionals, ...((values.path as string[] | undefined) ?? [])];
+  const useTui = Boolean(values.tui || (process.stdout.isTTY && process.stdin.isTTY && !values['no-tui']));
   const options = {
     paths: paths.length ? paths : undefined,
     sources: requestedSources as Source[] | undefined,
     since: parseDate(one(values.since)),
     until: parseDate(one(values.until), true),
-    pricingFile: one(values.pricing)
+    pricingFile: one(values.pricing),
+    rollup: values.json ? undefined : 'day' as const
   };
   const result = await scanUsage(options);
 
@@ -99,7 +101,6 @@ const main = async (): Promise<void> => {
     return;
   }
 
-  const useTui = Boolean(values.tui || (process.stdout.isTTY && process.stdin.isTTY && !values['no-tui']));
   if (!useTui) {
     process.stdout.write(`${formatSummary(result, period)}\n`);
     return;

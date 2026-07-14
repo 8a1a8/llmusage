@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.4 — 2026-07-13
+
+- Fix live-update heap exhaustion on large all-history TUI scans.
+- Cache already-priced immutable records so unchanged files retain object identity across refreshes.
+- Use lossless per-session/day/model/project rollups for interactive and text-table output while keeping JSON record-level.
+- Add scanner reference-reuse and exact-rollup tests plus a no-forced-GC Ink live-update soak.
+
 ## 0.1.3 — 2026-07-12
 
 - Discover and analyze exact Claude Desktop Cowork/agent session usage on Windows, macOS, and Linux.

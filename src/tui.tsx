@@ -13,6 +13,7 @@ interface AppProps {
   options: ScanOptions;
   initialPeriod: Period;
   refreshMs: number;
+  scan?: (options: ScanOptions) => Promise<ScanResult>;
 }
 
 const metricValue = (group: {cost: number; totalTokens: number}, metric: 'cost' | 'tokens'): number =>
@@ -91,7 +92,7 @@ const BreakdownTable = ({result, breakdown}: {result: ScanResult; breakdown: 'mo
   );
 };
 
-export const App = ({initial, options, initialPeriod, refreshMs}: AppProps) => {
+export const App = ({initial, options, initialPeriod, refreshMs, scan = scanUsage}: AppProps) => {
   const {exit} = useApp();
   const [result, setResult] = useState(initial);
   const [periodIndex, setPeriodIndex] = useState(periods.indexOf(initialPeriod));
@@ -120,7 +121,7 @@ export const App = ({initial, options, initialPeriod, refreshMs}: AppProps) => {
     if (scanning.current) return;
     scanning.current = true;
     try {
-      const next = await scanUsage(options);
+      const next = await scan(options);
       if (next !== resultRef.current) {
         resultRef.current = next;
         setResult(next);
